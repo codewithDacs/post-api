@@ -1,24 +1,39 @@
 <?php
-// Simulate a database with an array
-$posts = [
-    ['id' => 1, 'title' => 'First Post', 'body' => 'This is the first post.'],
-    ['id' => 2, 'title' => 'Second Post', 'body' => 'This is the second post.']
-];
+header("Content-Type: application/json");
+
+// Database connection
+$host = 'localhost';
+$db = 'blog';
+$user = 'root';
+$pass = '';
+$conn = new mysqli($host, $user, $pass, $db);
+
+// Check connection
+if ($conn->connect_error) {
+    http_response_code(500);
+    die(json_encode(["message" => "Database connection failed: " . $conn->connect_error]));
+}
 
 // Get all posts
 function getPosts() {
-    global $posts;
+    global $conn;
+    $result = $conn->query("SELECT * FROM posts");
+    $posts = [];
+    while ($row = $result->fetch_assoc()) {
+        $posts[] = $row;
+    }
     echo json_encode($posts);
 }
 
 // Get a single post by ID
 function getPost($id) {
-    global $posts;
-    $post = array_filter($posts, function($post) use ($id) {
-        return $post['id'] == $id;
-    });
-    if (!empty($post)) {
-        echo json_encode(array_values($post)[0]);
+    global $conn;
+    $stmt = $conn->prepare("SELECT * FROM posts WHERE id = ?");
+    $stmt->bind_param("i", $id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    if ($result->num_rows > 0) {
+        echo json_encode($result->fetch_assoc());
     } else {
         http_response_code(404);
         echo json_encode(["message" => "Post not found"]);
@@ -27,17 +42,19 @@ function getPost($id) {
 
 // Add a new post
 function addPost() {
-    global $posts;
+    global $conn;
     $input = json_decode(file_get_contents('php://input'), true);
     if (isset($input['title']) && isset($input['body'])) {
-        $newPost = [
-            'id' => end($posts)['id'] + 1,
-            'title' => $input['title'],
-            'body' => $input['body']
-        ];
-        array_push($posts, $newPost);
-        http_response_code(201);
-        echo json_encode($newPost);
+        $stmt = $conn->prepare("INSERT INTO posts (title, body) VALUES (?, ?)");
+        $stmt->bind_param("ss", $input['title'], $input['body']);
+        if ($stmt->execute()) {
+            $newPostId = $stmt->insert_id;
+            http_response_code(201);
+            echo json_encode(["id" => $newPostId, "title" => $input['title'], "body" => $input['body']]);
+        } else {
+            http_response_code(500);
+            echo json_encode(["message" => "Failed to create post"]);
+        }
     } else {
         http_response_code(400);
         echo json_encode(["message" => "Invalid input"]);
@@ -46,33 +63,47 @@ function addPost() {
 
 // Update a post by ID
 function updatePost($id) {
-    global $posts;
+    global $conn;
     $input = json_decode(file_get_contents('php://input'), true);
-    foreach ($posts as &$post) {
-        if ($post['id'] == $id) {
-            if (isset($input['title'])) $post['title'] = $input['title'];
-            if (isset($input['body'])) $post['body'] = $input['body'];
-            echo json_encode($post);
-            return;
+    if (isset($input['title']) || isset($input['body'])) {
+        $query = "UPDATE posts SET ";
+        $params = [];
+        if (isset($input['title'])) {
+            $query .= "title = ?, ";
+            $params[] = $input['title'];
         }
+        if (isset($input['body'])) {
+            $query .= "body = ?, ";
+            $params[] = $input['body'];
+        }
+        $query = rtrim($query, ", ") . " WHERE id = ?";
+        $params[] = $id;
+
+        $stmt = $conn->prepare($query);
+        $types = str_repeat('s', count($params) - 1) . 'i'; // All strings except the last (id)
+        $stmt->bind_param($types, ...$params);
+        if ($stmt->execute()) {
+            echo json_encode(["message" => "Post updated"]);
+        } else {
+            http_response_code(500);
+            echo json_encode(["message" => "Failed to update post"]);
+        }
+    } else {
+        http_response_code(400);
+        echo json_encode(["message" => "No data provided"]);
     }
-    http_response_code(404);
-    echo json_encode(["message" => "Post not found"]);
 }
 
 // Delete a post by ID
 function deletePost($id) {
-    global $posts;
-    $initialLength = count($posts);
-    $posts = array_filter($posts, function($post) use ($id) {
-        return $post['id'] != $id;
-    });
-    if (count($posts) < $initialLength) {
-        http_response_code(200);
+    global $conn;
+    $stmt = $conn->prepare("DELETE FROM posts WHERE id = ?");
+    $stmt->bind_param("i", $id);
+    if ($stmt->execute()) {
         echo json_encode(["message" => "Post deleted"]);
     } else {
-        http_response_code(404);
-        echo json_encode(["message" => "Post not found"]);
+        http_response_code(500);
+        echo json_encode(["message" => "Failed to delete post"]);
     }
 }
 ?>
