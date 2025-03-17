@@ -1,5 +1,21 @@
 <?php
+// Allow requests from any origin (for development only)
+header("Access-Control-Allow-Origin: *");
+
+// Allow specific HTTP methods
+header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
+
+// Allow specific headers
+header("Access-Control-Allow-Headers: Content-Type");
+
+// Set the content type to JSON
 header("Content-Type: application/json");
+
+// Handle preflight requests for CORS
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit();
+}
 
 // Include the posts logic
 require 'posts.php';

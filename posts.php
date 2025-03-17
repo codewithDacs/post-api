@@ -20,6 +20,8 @@ function getPosts() {
     $result = $conn->query("SELECT * FROM posts");
     $posts = [];
     while ($row = $result->fetch_assoc()) {
+        // Cast the 'id' field to an integer
+        $row['id'] = (int)$row['id'];
         $posts[] = $row;
     }
     echo json_encode($posts);
@@ -33,7 +35,13 @@ function getPost($id) {
     $stmt->execute();
     $result = $stmt->get_result();
     if ($result->num_rows > 0) {
-        echo json_encode($result->fetch_assoc());
+        $posts = [];
+        while ($row = $result->fetch_assoc()) {
+            // Cast the 'id' field to an integer
+            $row['id'] = (int)$row['id'];
+            $posts[] = $row;
+        }
+        echo json_encode($posts);
     } else {
         http_response_code(404);
         echo json_encode(["message" => "Post not found"]);
